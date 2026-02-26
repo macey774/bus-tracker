@@ -9,7 +9,9 @@
         #status { margin: 20px; padding: 15px; background: #222; border-radius: 8px; }
         .success { color: #0f0; }
         .error { color: #f00; }
+        .warning { color: #ff0; }
         #counter { font-size: 3em; margin: 10px; }
+        #network { font-size: 0.9em; color: #aaa; }
     </style>
 </head>
 <body>
@@ -17,14 +19,15 @@
     <p>Identifiant : <strong id="busId">BUS_4</strong></p>
     <div id="counter">0</div>
     <div id="status">Initialisation...</div>
+    <div id="network">Vérification réseau...</div>
     <p>Envoi toutes les 5 secondes</p>
 
-    <!-- Utilisation de Firebase 8.x (compatible avec l'API globale) -->
+    <!-- Firebase 8.x -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <script>
-        // Configuration Firebase (identique à la vôtre)
+        // Configuration Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBcKo-baav4AZss0wibZFSPUonwOPeZEF8",
             authDomain: "bus-scolaire---iug.firebaseapp.com",
@@ -35,60 +38,96 @@
             appId: "1:527926199083:web:c0f5057680762a33343b6e"
         };
 
-        // Initialiser Firebase (maintenant firebase est défini globalement)
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+        // Variable pour stocker l'état de Firebase
+        let firebaseReady = false;
 
-        const busId = "BUS_4"; // ou "BUS_8" selon le bus
-        let counter = 0;
-        const counterSpan = document.getElementById('counter');
-        const statusDiv = document.getElementById('status');
-
-        function sendPosition() {
-            if (!navigator.geolocation) {
-                statusDiv.innerHTML = '<span class="error">GPS non supporté</span>';
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    const speed = position.coords.speed || 0;
-
-                    // Référence Firebase
-                    const ref = database.ref('bus_positions/' + busId);
-                    ref.set({
-                        lat: lat,
-                        lng: lng,
-                        speed: speed,
-                        timestamp: Date.now()
-                    }).then(() => {
-                        counter++;
-                        counterSpan.textContent = counter;
-                        statusDiv.innerHTML = `<span class="success">✅ Envoyé #${counter}<br>Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}</span>`;
-                    }).catch((error) => {
-                        statusDiv.innerHTML = `<span class="error">❌ Firebase: ${error.message}</span>`;
-                    });
-                },
-                (error) => {
-                    let msg = "Erreur GPS";
-                    if (error.code === 1) msg = "Autorisation refusée";
-                    else if (error.code === 2) msg = "Position indisponible";
-                    else if (error.code === 3) msg = "Délai dépassé";
-                    statusDiv.innerHTML = `<span class="error">${msg}</span>`;
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
+        // Fonction de test de connexion à Firebase
+        function testFirebaseConnection() {
+            const networkDiv = document.getElementById('network');
+            networkDiv.innerHTML = 'Test de connexion à Firebase...';
+            
+            // On essaie de lire la base de données (juste pour voir si on peut se connecter)
+            const testRef = firebase.database().ref('.info/connected');
+            testRef.on('value', (snap) => {
+                if (snap.val() === true) {
+                    networkDiv.innerHTML = '✅ Connecté à Firebase (temps réel)';
+                    firebaseReady = true;
+                } else {
+                    networkDiv.innerHTML = '⚠️ En attente de connexion Firebase...';
                 }
-            );
+            }, (error) => {
+                networkDiv.innerHTML = `❌ Erreur de connexion Firebase : ${error.message}`;
+                console.error('Firebase connection error:', error);
+            });
         }
 
-        // Premier envoi immédiat, puis toutes les 5 secondes
-        sendPosition();
-        setInterval(sendPosition, 5000);
+        try {
+            // Initialiser Firebase
+            firebase.initializeApp(firebaseConfig);
+            const database = firebase.database();
+            
+            // Tester la connexion
+            testFirebaseConnection();
+
+            const busId = "BUS_4"; // ou "BUS_8"
+            let counter = 0;
+            const counterSpan = document.getElementById('counter');
+            const statusDiv = document.getElementById('status');
+
+            function sendPosition() {
+                if (!navigator.geolocation) {
+                    statusDiv.innerHTML = '<span class="error">GPS non supporté</span>';
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const speed = position.coords.speed || 0;
+
+                        // Vérifier si Firebase est prêt
+                        if (!firebaseReady) {
+                            statusDiv.innerHTML = '<span class="warning">⚠️ En attente de connexion Firebase...</span>';
+                            return;
+                        }
+
+                        const ref = database.ref('bus_positions/' + busId);
+                        ref.set({
+                            lat: lat,
+                            lng: lng,
+                            speed: speed,
+                            timestamp: Date.now()
+                        }).then(() => {
+                            counter++;
+                            counterSpan.textContent = counter;
+                            statusDiv.innerHTML = `<span class="success">✅ Envoyé #${counter}<br>Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}</span>`;
+                        }).catch((error) => {
+                            statusDiv.innerHTML = `<span class="error">❌ Firebase: ${error.message}</span>`;
+                            console.error('Firebase write error:', error);
+                        });
+                    },
+                    (error) => {
+                        let msg = "Erreur GPS";
+                        if (error.code === 1) msg = "Autorisation refusée";
+                        else if (error.code === 2) msg = "Position indisponible";
+                        else if (error.code === 3) msg = "Délai dépassé";
+                        statusDiv.innerHTML = `<span class="error">${msg}</span>`;
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            }
+
+            // Premier envoi immédiat, puis toutes les 5 secondes
+            sendPosition();
+            setInterval(sendPosition, 5000);
+        } catch (e) {
+            document.getElementById('status').innerHTML = `<span class="error">Erreur init Firebase: ${e.message}</span>`;
+        }
     </script>
 </body>
 </html>
