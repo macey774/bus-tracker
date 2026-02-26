@@ -2,30 +2,40 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tracker Bus (REST)</title>
     <style>
-        body { font-family: Arial; text-align: center; padding: 20px; background: #111; color: #fff; }
-        #status { margin: 20px; padding: 15px; background: #222; border-radius: 8px; }
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background: #111;
+            color: #fff;
+        }
+        #status {
+            margin: 20px;
+            padding: 15px;
+            background: #222;
+            border-radius: 8px;
+        }
         .success { color: #0f0; }
         .error { color: #f00; }
         .warning { color: #ff0; }
         #counter { font-size: 3em; margin: 10px; }
         #network { font-size: 0.9em; color: #aaa; }
-        button { padding: 10px 20px; margin: 10px; background: #4285f4; color: white; border: none; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>🚌 Bus Tracker (REST API)</h1>
+    <h1>🚌 Bus Tracker</h1>
     <p>Identifiant : <strong id="busId">BUS_4</strong></p>
     <div id="counter">0</div>
     <div id="status">Initialisation...</div>
     <div id="network">Test de connexion...</div>
-    <button id="testBtn">Tester la connexion</button>
     <p>Envoi toutes les 2 secondes</p>
 
     <script>
-        const busId = "BUS_4"; // ou "BUS_8"
+        // === CONFIGURATION ===
+        const busId = "BUS_4"; // Mettre "BUS_8" pour l'autre bus
         const databaseURL = "https://bus-scolaire---iug-default-rtdb.europe-west1.firebasedatabase.app";
         let counter = 0;
         let lastPosition = null;
@@ -34,7 +44,7 @@
         const statusDiv = document.getElementById('status');
         const networkDiv = document.getElementById('network');
 
-        // Fonction pour tester la connexion (requête GET)
+        // === TEST DE CONNEXION AU SERVEUR ===
         async function testConnection() {
             networkDiv.innerHTML = 'Test de connexion...';
             try {
@@ -52,14 +62,14 @@
             }
         }
 
-        // Envoi de la position via PUT
+        // === ENVOI DE LA POSITION VIA PUT ===
         async function sendPosition(lat, lng, speed) {
             const url = `${databaseURL}/bus_positions/${busId}.json`;
             const data = {
                 lat: lat,
                 lng: lng,
                 speed: speed,
-                timestamp: Date.now()
+                timestamp: Date.now()  // timestamp en millisecondes
             };
 
             try {
@@ -82,8 +92,8 @@
             }
         }
 
-        // Fonction principale de géolocalisation et envoi
-        function startTracking() {
+        // === FONCTION DE GÉOLOCALISATION ===
+        function getAndSendPosition() {
             if (!navigator.geolocation) {
                 statusDiv.innerHTML = '<span class="error">GPS non supporté</span>';
                 return;
@@ -111,20 +121,18 @@
             );
         }
 
-        // Lancer un test de connexion au chargement
+        // === LANCEMENT AU CHARGEMENT ===
         window.addEventListener('load', async () => {
             const connected = await testConnection();
             if (connected) {
-                // Démarrer le tracking
-                startTracking();
-                setInterval(startTracking, 2000);
+                // Premier envoi immédiat
+                getAndSendPosition();
+                // Puis toutes les 2 secondes
+                setInterval(getAndSendPosition, 2000);
             } else {
                 statusDiv.innerHTML = '<span class="error">Impossible de se connecter au serveur. Vérifiez votre connexion.</span>';
             }
         });
-
-        // Bouton pour tester manuellement
-        document.getElementById('testBtn').addEventListener('click', testConnection);
     </script>
 </body>
 </html>
