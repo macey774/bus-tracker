@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tracker Bus</title>
+    <title>Tracker Bus (REST)</title>
     <style>
         body { font-family: Arial; text-align: center; padding: 20px; background: #111; color: #fff; }
         #status { margin: 20px; padding: 15px; background: #222; border-radius: 8px; }
@@ -12,122 +12,119 @@
         .warning { color: #ff0; }
         #counter { font-size: 3em; margin: 10px; }
         #network { font-size: 0.9em; color: #aaa; }
+        button { padding: 10px 20px; margin: 10px; background: #4285f4; color: white; border: none; border-radius: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>🚌 Bus Tracker</h1>
+    <h1>🚌 Bus Tracker (REST API)</h1>
     <p>Identifiant : <strong id="busId">BUS_4</strong></p>
     <div id="counter">0</div>
     <div id="status">Initialisation...</div>
-    <div id="network">Vérification réseau...</div>
+    <div id="network">Test de connexion...</div>
+    <button id="testBtn">Tester la connexion</button>
     <p>Envoi toutes les 5 secondes</p>
 
-    <!-- Firebase 8.x -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
     <script>
-        // Configuration Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyBcKo-baav4AZss0wibZFSPUonwOPeZEF8",
-            authDomain: "bus-scolaire---iug.firebaseapp.com",
-            databaseURL: "https://bus-scolaire---iug-default-rtdb.europe-west1.firebasedatabase.app",
-            projectId: "bus-scolaire---iug",
-            storageBucket: "bus-scolaire---iug.firebasestorage.app",
-            messagingSenderId: "527926199083",
-            appId: "1:527926199083:web:c0f5057680762a33343b6e"
-        };
+        const busId = "BUS_4"; // ou "BUS_8"
+        const databaseURL = "https://bus-scolaire---iug-default-rtdb.europe-west1.firebasedatabase.app";
+        let counter = 0;
+        let lastPosition = null;
 
-        // Variable pour stocker l'état de Firebase
-        let firebaseReady = false;
+        const counterSpan = document.getElementById('counter');
+        const statusDiv = document.getElementById('status');
+        const networkDiv = document.getElementById('network');
 
-        // Fonction de test de connexion à Firebase
-        function testFirebaseConnection() {
-            const networkDiv = document.getElementById('network');
-            networkDiv.innerHTML = 'Test de connexion à Firebase...';
-            
-            // On essaie de lire la base de données (juste pour voir si on peut se connecter)
-            const testRef = firebase.database().ref('.info/connected');
-            testRef.on('value', (snap) => {
-                if (snap.val() === true) {
-                    networkDiv.innerHTML = '✅ Connecté à Firebase (temps réel)';
-                    firebaseReady = true;
+        // Fonction pour tester la connexion (requête GET)
+        async function testConnection() {
+            networkDiv.innerHTML = 'Test de connexion...';
+            try {
+                const response = await fetch(`${databaseURL}/.json?shallow=true`);
+                if (response.ok) {
+                    networkDiv.innerHTML = '✅ Connexion réussie (REST)';
+                    return true;
                 } else {
-                    networkDiv.innerHTML = '⚠️ En attente de connexion Firebase...';
+                    networkDiv.innerHTML = `❌ Échec connexion: ${response.status}`;
+                    return false;
                 }
-            }, (error) => {
-                networkDiv.innerHTML = `❌ Erreur de connexion Firebase : ${error.message}`;
-                console.error('Firebase connection error:', error);
-            });
+            } catch (error) {
+                networkDiv.innerHTML = `❌ Erreur réseau: ${error.message}`;
+                return false;
+            }
         }
 
-        try {
-            // Initialiser Firebase
-            firebase.initializeApp(firebaseConfig);
-            const database = firebase.database();
-            
-            // Tester la connexion
-            testFirebaseConnection();
+        // Envoi de la position via PUT
+        async function sendPosition(lat, lng, speed) {
+            const url = `${databaseURL}/bus_positions/${busId}.json`;
+            const data = {
+                lat: lat,
+                lng: lng,
+                speed: speed,
+                timestamp: Date.now()
+            };
 
-            const busId = "BUS_4"; // ou "BUS_8"
-            let counter = 0;
-            const counterSpan = document.getElementById('counter');
-            const statusDiv = document.getElementById('status');
+            try {
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
 
-            function sendPosition() {
-                if (!navigator.geolocation) {
-                    statusDiv.innerHTML = '<span class="error">GPS non supporté</span>';
-                    return;
+                if (response.ok) {
+                    counter++;
+                    counterSpan.textContent = counter;
+                    statusDiv.innerHTML = `<span class="success">✅ Envoyé #${counter}<br>Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}</span>`;
+                } else {
+                    const errorText = await response.text();
+                    statusDiv.innerHTML = `<span class="error">❌ Erreur HTTP ${response.status}: ${errorText}</span>`;
                 }
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="error">❌ Erreur réseau: ${error.message}</span>`;
+            }
+        }
 
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        const speed = position.coords.speed || 0;
-
-                        // Vérifier si Firebase est prêt
-                        if (!firebaseReady) {
-                            statusDiv.innerHTML = '<span class="warning">⚠️ En attente de connexion Firebase...</span>';
-                            return;
-                        }
-
-                        const ref = database.ref('bus_positions/' + busId);
-                        ref.set({
-                            lat: lat,
-                            lng: lng,
-                            speed: speed,
-                            timestamp: Date.now()
-                        }).then(() => {
-                            counter++;
-                            counterSpan.textContent = counter;
-                            statusDiv.innerHTML = `<span class="success">✅ Envoyé #${counter}<br>Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}</span>`;
-                        }).catch((error) => {
-                            statusDiv.innerHTML = `<span class="error">❌ Firebase: ${error.message}</span>`;
-                            console.error('Firebase write error:', error);
-                        });
-                    },
-                    (error) => {
-                        let msg = "Erreur GPS";
-                        if (error.code === 1) msg = "Autorisation refusée";
-                        else if (error.code === 2) msg = "Position indisponible";
-                        else if (error.code === 3) msg = "Délai dépassé";
-                        statusDiv.innerHTML = `<span class="error">${msg}</span>`;
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 0
-                    }
-                );
+        // Fonction principale de géolocalisation et envoi
+        function startTracking() {
+            if (!navigator.geolocation) {
+                statusDiv.innerHTML = '<span class="error">GPS non supporté</span>';
+                return;
             }
 
-            // Premier envoi immédiat, puis toutes les 5 secondes
-            sendPosition();
-            setInterval(sendPosition, 5000);
-        } catch (e) {
-            document.getElementById('status').innerHTML = `<span class="error">Erreur init Firebase: ${e.message}</span>`;
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const speed = position.coords.speed || 0;
+                    sendPosition(lat, lng, speed);
+                },
+                (error) => {
+                    let msg = "Erreur GPS";
+                    if (error.code === 1) msg = "Autorisation refusée";
+                    else if (error.code === 2) msg = "Position indisponible";
+                    else if (error.code === 3) msg = "Délai dépassé";
+                    statusDiv.innerHTML = `<span class="error">${msg}</span>`;
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
         }
+
+        // Lancer un test de connexion au chargement
+        window.addEventListener('load', async () => {
+            const connected = await testConnection();
+            if (connected) {
+                // Démarrer le tracking
+                startTracking();
+                setInterval(startTracking, 5000);
+            } else {
+                statusDiv.innerHTML = '<span class="error">Impossible de se connecter au serveur. Vérifiez votre connexion.</span>';
+            }
+        });
+
+        // Bouton pour tester manuellement
+        document.getElementById('testBtn').addEventListener('click', testConnection);
     </script>
 </body>
 </html>
