@@ -22,7 +22,7 @@
     <div id="status">Initialisation...</div>
     <div id="network">Test de connexion...</div>
     <button id="testBtn">Tester la connexion</button>
-    <p>Envoi toutes les 5 secondes</p>
+    <p>Envoi toutes les 2 secondes</p>
 
     <script>
         const busId = "BUS_4"; // ou "BUS_8"
@@ -117,7 +117,7 @@
             if (connected) {
                 // Démarrer le tracking
                 startTracking();
-                setInterval(startTracking, 5000);
+                setInterval(startTracking, 2000);
             } else {
                 statusDiv.innerHTML = '<span class="error">Impossible de se connecter au serveur. Vérifiez votre connexion.</span>';
             }
